@@ -200,23 +200,6 @@ def apply_fundamental_filters(technical_results, min_ni, max_pe, max_pb, min_gro
     
     return final_results
 
-def highlight_oversold(df):
-    """
-    Apply conditional formatting to highlight oversold stocks.
-    """
-    # Create a copy of the dataframe
-    styled_df = pd.DataFrame('', index=df.index, columns=df.columns)
-    
-    # Highlight oversold stocks
-    mask = df['Signal'] == 'Oversold'
-    styled_df.loc[mask, :] = 'background-color: #FFCCCB'
-    
-    # Highlight overbought stocks
-    mask = df['Signal'] == 'Overbought'
-    styled_df.loc[mask, :] = 'background-color: #CCFFCC'
-    
-    return styled_df
-
 def format_progress_bar(value, min_val, max_val, color_scheme):
     """
     Create HTML for a progress bar with the given value.
@@ -572,15 +555,23 @@ def main():
         # Display intermediate technical results
         if technical_results:
             tech_df = pd.DataFrame(technical_results, columns=["Ticker", "RSI", "Signal"])
-            tech_df['RSI_Display'] = tech_df['RSI'].apply(lambda x: format_progress_bar(x, 0, 100, 'rsi'))
-            tech_styled_df = tech_df[["Ticker", "RSI_Display", "Signal"]].style.apply(
-                lambda _: highlight_oversold(tech_df), axis=None
-            )
+            
+            # Create a copy of the dataframe for styling
+            tech_display_df = tech_df.copy()
+            
+            # Add RSI display column with progress bars
+            tech_display_df['RSI_Display'] = tech_display_df['RSI'].apply(lambda x: format_progress_bar(x, 0, 100, 'rsi'))
+            
+            # Create a styled dataframe with just the columns we want to display
+            tech_display_df = tech_display_df[["Ticker", "RSI_Display", "Signal"]]
+            
+            # Apply styling directly without using a function that references the original dataframe
+            styled_tech_df = tech_display_df.copy()
             
             with technical_results_placeholder.container():
                 st.subheader("Technical Screening Results")
                 st.write(f"Found {len(technical_results)} stocks matching technical criteria")
-                st.dataframe(tech_styled_df, height=200, use_container_width=True)
+                st.dataframe(styled_tech_df, height=200, use_container_width=True)
                 st.write("Applying fundamental filters...")
         
         # SECOND PASS: Fundamental Screening
@@ -609,26 +600,25 @@ def main():
             # Sort by Net Income (descending)
             df = df.sort_values(by="NI(T)", ascending=False)
             
-            # Format RSI column with progress bars
-            df['RSI_Display'] = df['RSI'].apply(lambda x: format_progress_bar(x, 0, 100, 'rsi'))
+            # Create a copy for display
+            display_df = df.copy()
             
             # Format numeric columns
-            df['NI(T)'] = df['NI(T)'].map('{:.2f}'.format)
-            df['Growth(%)'] = df['Growth(%)'].map('{:.2f}'.format)
-            df['P/E'] = df['P/E'].map('{:.2f}'.format)
-            df['P/B'] = df['P/B'].map('{:.2f}'.format)
+            display_df['NI(T)'] = display_df['NI(T)'].map('{:.2f}'.format)
+            display_df['Growth(%)'] = display_df['Growth(%)'].map('{:.2f}'.format)
+            display_df['P/E'] = display_df['P/E'].map('{:.2f}'.format)
+            display_df['P/B'] = display_df['P/B'].map('{:.2f}'.format)
+            
+            # Format RSI column with progress bars
+            display_df['RSI_Display'] = display_df['RSI'].apply(lambda x: format_progress_bar(x, 0, 100, 'rsi'))
             
             # Reorder columns for display
-            display_df = df[["Ticker", "NI(T)", "Growth(%)", "P/E", "P/B", "RSI_Display", "Signal"]]
-            
-            # Apply styling
-            styled_df = display_df.style.apply(lambda _: highlight_oversold(df), axis=None)
+            display_df = display_df[["Ticker", "NI(T)", "Growth(%)", "P/E", "P/B", "RSI_Display", "Signal"]]
             
             # Cache the results
             st.session_state.results_cache = {
                 'df': df,
                 'display_df': display_df,
-                'styled_df': styled_df,
                 'technical_count': len(technical_results),
                 'final_count': len(final_results),
                 'elapsed_time': time.time() - start_time,
@@ -640,7 +630,6 @@ def main():
             st.session_state.results_cache = {
                 'df': None,
                 'display_df': None,
-                'styled_df': None,
                 'technical_count': len(technical_results),
                 'final_count': 0,
                 'elapsed_time': time.time() - start_time,
@@ -674,7 +663,7 @@ def main():
             with results_placeholder.container():
                 st.subheader("Final Results (Technical + Fundamental)")
                 st.dataframe(
-                    results['styled_df'], 
+                    results['display_df'], 
                     height=500, 
                     use_container_width=True
                 )
